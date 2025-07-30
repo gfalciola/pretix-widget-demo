@@ -64,11 +64,12 @@
     <script>
         // Configuration - This will be replaced with actual values when generating the code
         const EVENT_ID = 'restoring-pretix-test-2';
-        const API_BASE_URL = 'https://tickets-staging.conferenceconnect.com';
+        const PRETIX_URL = 'https://tickets-staging.conferenceconnect.com';
+        const APP_URL = 'https://staging.conferenceconnect.com';
 
         // Load Pretix Widget script
         const script = document.createElement("script");
-        script.src = `${API_BASE_URL}/widget/v1.en.js`;
+        script.src = `${PRETIX_URL}/widget/v1.en.js`;
         script.async = true;
         script.crossOrigin = "anonymous";
         document.head.appendChild(script);
@@ -100,8 +101,8 @@
         // Get ticket prices from API
         async function getTicketPrices() {
             try {
-                // Usar el nuevo endpoint público
-                const response = await fetch(`${API_BASE_URL}/api/public/events/${EVENT_ID}/ticket-prices`, {
+                // Usar el nuevo endpoint público en nuestra aplicación web
+                const response = await fetch(`${APP_URL}/api/public/events/${EVENT_ID}/ticket-prices`, {
                     method: 'GET',
                     headers: {
                         'Accept': 'application/json',
