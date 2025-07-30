@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pretix Widget Demo</title>
+    <link href="https://fonts.googleapis.com/css?family=Sora:regular,700,600,500&amp;display=swap" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="https://tickets-staging.conferenceconnect.com/conferenceconnect/restoring-pretix-test-2/widget/v1.css" crossorigin />
+    <style>
+        body {
+            font-family: 'Sora', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 30px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        #tsw {
+            --ticket-shop-widget-main-color: #9152ff;
+            --ticket-shop-widget-active-color: #711fff;
+            --ticket-shop-widget-disabled-color: #9ca3af;
+            --ticket-shop-font-family: "Sora", sans-serif;
+            --ticket-shop-widget-button-font-weight: 700;
+            font-family: var(--ticket-shop-font-family);
+            border-color: transparent !important;
+        }
+        #tsw .fees-breakdown {
+            font-size: 0.9em;
+            color: #666;
+            margin: 24px 0 8px;
+            width: 100%;
+            text-align: right;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-width: 300px;
+            margin-left: auto;
+            margin-right: 48px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Pretix Widget Demo</h1>
+        <pretix-widget id="tsw" event="https://tickets-staging.conferenceconnect.com/conferenceconnect/restoring-pretix-test-2/" single-item-select="button"></pretix-widget>
+        <noscript>
+            <div class="pretix-widget-info-message">
+                JavaScript is disabled in your browser. To access our ticket shop without JavaScript, please 
+                <a target="_blank" rel="noopener" href="https://tickets-staging.conferenceconnect.com/conferenceconnect/restoring-pretix-test-2/">click here</a>.
+            </div>
+        </noscript>
+    </div>
+
+    <script>
+        // Load Pretix Widget script
+        const script = document.createElement("script");
+        script.src = "https://tickets-staging.conferenceconnect.com/widget/v1.en.js";
+        script.async = true;
+        script.crossOrigin = "anonymous";
+        document.head.appendChild(script);
+
+        // Simple fee calculation
+        function calculateFees(basePrice) {
+            const fixedFee = 5.30; // $5.00 + $0.30
+            const percentFee = 0.029; // 2.9%
+            const total = (basePrice + fixedFee) / (1 - percentFee);
+            const fees = total - basePrice;
+            return {
+                total: total,
+                processingFee: fees - 5.00,
+                platformFee: 5.00
+            };
+        }
+
+        // Update fees display
+        function updateFees() {
+            console.log('Updating fees...');
+            const containers = document.querySelectorAll(".pretix-widget-item");
+            let total = 0;
+
+            containers.forEach(container => {
+                const qty = parseInt(container.querySelector(".pretix-widget-item-count-multiple")?.value || "0");
+                const priceEl = container.querySelector(".pretix-widget-item-price-value, .pretix-widget-item-price");
+                const donationEl = container.querySelector(".pretix-widget-pricebox-price-input");
+                
+                let price = 0;
+                if (donationEl) {
+                    price = parseFloat(donationEl.value || "0");
+                    console.log('Donation price:', price);
+                } else if (priceEl) {
+                    const match = priceEl.textContent.match(/\d+(\.\d+)?/);
+                    price = match ? parseFloat(match[0]) : 0;
+                    console.log('Fixed price:', price);
+                }
+                
+                const itemTotal = price * qty;
+                console.log(`Item total (${price} * ${qty}):`, itemTotal);
+                total += itemTotal;
+            });
+
+            console.log('Total base price:', total);
+
+            if (total > 0) {
+                const fees = calculateFees(total);
+                console.log('Calculated fees:', fees);
+                let feesDiv = document.querySelector(".fees-breakdown");
+                
+                if (!feesDiv) {
+                    feesDiv = document.createElement("div");
+                    feesDiv.className = "fees-breakdown";
+                    const button = document.querySelector(".pretix-widget-btn-primary");
+                    if (button) button.parentElement.insertBefore(feesDiv, button);
+                }
+
+                feesDiv.innerHTML = `
+                    <div style="font-size: 1.1em; font-weight: 600; color: #333; margin-bottom: 4px;">
+                        Total with fees: $${fees.total.toFixed(2)}
+                    </div>
+                    <div style="white-space: nowrap;">
+                        Conference Connect hosting and processing fee: $${fees.platformFee.toFixed(2)}
+                    </div>
+                    <div style="white-space: nowrap;">
+                        Credit Card processing fee: $${fees.processingFee.toFixed(2)}
+                    </div>
+                `;
+            } else {
+                document.querySelector(".fees-breakdown")?.remove();
+            }
+        }
+
+        // Initialize when widget is ready
+        window.pretixWidgetCallback = function() {
+            console.log('Widget callback initialized');
+            window.PretixWidget.addLoadListener(function() {
+                console.log('Widget loaded');
+                // Initial setup after widget loads
+                setTimeout(() => {
+                    console.log('Setting up listeners');
+                    // Add listeners to quantity inputs
+                    document.querySelectorAll(".pretix-widget-item-count-multiple").forEach(input => {
+                        input.addEventListener("change", updateFees);
+                        input.addEventListener("input", updateFees);
+                    });
+                    
+                    // Add listeners to donation inputs
+                    document.querySelectorAll(".pretix-widget-pricebox-price-input").forEach(input => {
+                        input.addEventListener("change", updateFees);
+                        input.addEventListener("input", updateFees);
+                    });
+                    
+                    // Add listeners to quantity buttons
+                    document.querySelectorAll(".pretix-widget-item-count-plus, .pretix-widget-item-count-minus").forEach(btn => {
+                        btn.addEventListener("click", () => setTimeout(updateFees, 100));
+                    });
+                    
+                    // Initial calculation
+                    updateFees();
+                }, 1000);
+            });
+        };
+    </script>
+</body>
+</html>
