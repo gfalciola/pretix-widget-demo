@@ -82,11 +82,49 @@
             };
         }
 
+        // Get event ID from widget URL
+        function getEventId() {
+            const widget = document.querySelector('pretix-widget');
+            if (!widget) return null;
+            
+            const eventUrl = widget.getAttribute('event');
+            if (!eventUrl) return null;
+            
+            // Extract event ID from URL
+            const matches = eventUrl.match(/\/([^\/]+)\/$/);
+            return matches ? matches[1] : null;
+        }
+
+        // Get ticket prices from API
+        async function getTicketPrices() {
+            const eventId = getEventId();
+            if (!eventId) {
+                console.error('Could not determine event ID');
+                return null;
+            }
+
+            try {
+                const response = await fetch(`https://tickets-staging.conferenceconnect.com/api/events/${eventId}/tickets`);
+                if (!response.ok) throw new Error('API request failed');
+                
+                const data = await response.json();
+                console.log('API response:', data);
+                return data;
+            } catch (error) {
+                console.error('Error fetching ticket prices:', error);
+                return null;
+            }
+        }
+
         // Update fees display
-        function updateFees() {
+        async function updateFees() {
             console.log('Updating fees...');
             const containers = document.querySelectorAll(".pretix-widget-item");
             let total = 0;
+
+            // Get ticket prices from API
+            const ticketPrices = await getTicketPrices();
+            console.log('Ticket prices from API:', ticketPrices);
 
             containers.forEach(container => {
                 const qty = parseInt(container.querySelector(".pretix-widget-item-count-multiple")?.value || "0");
@@ -97,10 +135,20 @@
                 if (donationEl) {
                     price = parseFloat(donationEl.value || "0");
                     console.log('Donation price:', price);
-                } else if (priceEl) {
-                    const match = priceEl.textContent.match(/\d+(\.\d+)?/);
-                    price = match ? parseFloat(match[0]) : 0;
-                    console.log('Fixed price:', price);
+                } else if (priceEl && ticketPrices) {
+                    // Try to match the ticket name with the API data
+                    const ticketName = container.querySelector('.pretix-widget-item-title')?.textContent.trim();
+                    const ticketData = ticketPrices.find(t => t.name === ticketName);
+                    if (ticketData) {
+                        price = ticketData.price;
+                        console.log('Found price from API for', ticketName, ':', price);
+                    } else {
+                        // Fallback to parsing the price from the DOM
+                        const priceText = priceEl.textContent.trim();
+                        const match = priceText.match(/USD\s*(\d+(?:\.\d{2})?)|(\d+(?:\.\d{2})?)/);
+                        price = match ? parseFloat(match[1] || match[2]) : 0;
+                        console.log('Fallback price from DOM:', price);
+                    }
                 }
                 
                 const itemTotal = price * qty;
