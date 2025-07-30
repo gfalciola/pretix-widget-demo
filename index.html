@@ -272,18 +272,42 @@
                 }
             }
 
+            // Function to wait for widget to be fully loaded
+            function waitForPretixWidget(maxAttempts = 10) {
+                let attempts = 0;
+                
+                function checkWidget() {
+                    console.log('Checking widget, attempt:', attempts + 1);
+                    const $tsw = document.getElementById('tsw');
+                    const $items = document.querySelectorAll('.pretix-widget-item');
+                    
+                    if ($items.length > 0) {
+                        console.log('Widget items found:', $items.length);
+                        if($tsw) {
+                            const $isSoldOutNode = document.querySelector('.pretix-widget-availability-box .pretix-widget-availability-gone');
+                            if(!!$isSoldOutNode) { $tsw.classList.add('sold-out'); }
+                        }
+                        document.body.classList.add('tsw-widget-loaded');
+                        setupFeeCalculation();
+                        return;
+                    }
+                    
+                    attempts++;
+                    if (attempts < maxAttempts) {
+                        console.log('Widget not ready, trying again in 1s...');
+                        setTimeout(checkWidget, 1000);
+                    } else {
+                        console.error('Widget failed to load after', maxAttempts, 'attempts');
+                    }
+                }
+                
+                checkWidget();
+            }
+
             // Initialize when widget is ready
             window.PretixWidget.addLoadListener(function () {
                 console.log('Widget loaded');
-                const $tsw = document.getElementById('tsw'); // Ticket Shop Widget
-                if($tsw) {
-                    const $isSoldOutNode = document.querySelector('.pretix-widget-availability-box .pretix-widget-availability-gone');
-                    if(!!$isSoldOutNode) { $tsw.classList.add('sold-out'); }
-                }
-                setTimeout(() => { 
-                    document.body.classList.add('tsw-widget-loaded');
-                    setupFeeCalculation();
-                }, 1000);
+                waitForPretixWidget();
 
                 const eventUrl = document.location.href;
                 const onNavigate = (event) => {
