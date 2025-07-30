@@ -72,256 +72,306 @@
                 };
             }
 
-            // Function to get ticket prices from API
-            async function getTicketPrices() {
-                const API_BASE_URL = "https://staging.conferenceconnect.com";
-                const EVENT_SLUG = "restoring-pretix-test-2";
-
-                try {
-                    const response = await fetch(`${API_BASE_URL}/api/public/events/${EVENT_SLUG}/ticket-prices`, {
-                        headers: {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json'
-                        }
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
-                    }
-                    
-                    const data = await response.json();
-                    console.log('API response:', data);
-                    return data;
-                } catch (error) {
-                    console.error('Error fetching ticket prices:', error);
-                    return null;
-                }
-            }
-
-            // Helper function to parse price from DOM element
-            function parsePriceFromElement(container) {
-                const priceInput = container.querySelector('.pretix-widget-pricebox-price-input');
-                const priceElement = container.querySelector('[class*="price"]');
+            // Function to update price display (simplified - just show original prices)
+            function updatePriceDisplay() {
+                console.log('updatePriceDisplay called');
                 
-                if (priceInput) {
-                    // Donation ticket, use entered value
-                    return parseFloat(priceInput.value) || 0;
-                } else if (priceElement) {
-                    // Fixed price ticket
-                    const priceText = priceElement.textContent.trim();
-                    const priceMatch = priceText.match(/[\d,.]+/);
-                    if (priceMatch) {
-                        return parseFloat(priceMatch[0].replace(',', ''));
-                    }
-                }
-                return 0;
+                // Remove any existing fees breakdown from individual prices
+                const existingFees = document.querySelectorAll('.fees-breakdown');
+                existingFees.forEach(fee => fee.remove());
+                
+                // Update order total with fees
+                updateOrderTotal();
             }
 
             // Function to get total order value
-            async function getTotalOrderValue() {
+            function getTotalOrderValue() {
                 let totalValue = 0;
+                console.log('getTotalOrderValue called');
                 
-                // Try to get prices from API first
-                const ticketPrices = await getTicketPrices();
-                console.log('Ticket prices from API:', ticketPrices);
-                
+                // Find all ticket containers
                 const ticketContainers = document.querySelectorAll('.pretix-widget-item');
-                
-                if (ticketPrices) {
-                    // Use API prices
-                    ticketContainers.forEach((container, index) => {
-                        const quantityInput = container.querySelector('.pretix-widget-item-count-multiple');
-                        if (!quantityInput) return;
-                        
-                        const quantity = parseInt(quantityInput.value) || 0;
-                        if (quantity === 0) return;
+                console.log('Found ticket containers:', ticketContainers.length);
 
-                        const ticketData = ticketPrices[index];
-                        if (!ticketData) return;
+                ticketContainers.forEach((container) => {
+                    // Detectar si es un ticket de donación buscando un input de precio
+                    const priceInput = container.querySelector('.pretix-widget-pricebox-price-input');
+                    const quantityInput = container.querySelector('.pretix-widget-item-count-multiple');
+                    
+                    if (!quantityInput) return;
+                    
+                    const quantity = parseInt(quantityInput.value) || 0;
+                    if (quantity === 0) return;
 
-                        let price = ticketData.is_donation 
-                            ? parseFloat(container.querySelector('.pretix-widget-pricebox-price-input')?.value || 0)
-                            : ticketData.price;
+                    let price = 0;
+                    
+                    if (priceInput) {
+                        // Es un ticket de donación, usar el valor ingresado
+                        price = parseFloat(priceInput.value) || 0;
+                        console.log('Donation ticket price:', price);
+                    } else {
+                        // Ticket normal, buscar el precio fijo
+                        const priceElement = container.querySelector('[class*="price"]');
+                        if (priceElement) {
+                            const priceText = priceElement.textContent.trim();
+                            const priceMatch = priceText.match(/[\d,.]+/);
+                            if (priceMatch) {
+                                price = parseFloat(priceMatch[0].replace(',', ''));
+                            }
+                        }
+                        console.log('Fixed price ticket:', price);
+                    }
 
-                        console.log(`Found price from API for ${ticketData.name} :`, price);
-                        console.log(`Item total (${price} * ${quantity}):`, price * quantity);
-                        totalValue += price * quantity;
-                    });
-                } else {
-                    // Fallback to DOM parsing if API fails
-                    ticketContainers.forEach((container) => {
-                        const quantityInput = container.querySelector('.pretix-widget-item-count-multiple');
-                        if (!quantityInput) return;
-                        
-                        const quantity = parseInt(quantityInput.value) || 0;
-                        if (quantity === 0) return;
+                    console.log(`Item total (${price} * ${quantity}):`, price * quantity);
+                    totalValue += price * quantity;
+                });
 
-                        const price = parsePriceFromElement(container);
-                        console.log(`Item total (${price} * ${quantity}):`, price * quantity);
-                        totalValue += price * quantity;
-                    });
-                }
-
-                console.log('Total base price:', totalValue);
+                console.log('Total order value calculated:', totalValue);
                 return totalValue;
             }
 
             // Function to update order total with fees
-            async function updateOrderTotal() {
-                console.log('Updating fees...');
-                const totalValue = await getTotalOrderValue();
+            function updateOrderTotal() {
+                console.log('updateOrderTotal called');
                 
-                // Find or create fees container
-                let feesContainer = document.querySelector('.fees-breakdown');
+                const totalValue = getTotalOrderValue();
+                console.log('Total order value:', totalValue);
                 
                 if (totalValue > 0) {
                     const fees = calculateOrderFees(totalValue);
-                    console.log('Calculated fees:', fees);
+                    console.log('Calculating fees for order:', fees);
                     
-                    if (!feesContainer) {
-                        const buyButton = document.querySelector('.pretix-widget-btn-primary');
-                        if (buyButton && buyButton.parentElement) {
-                            feesContainer = document.createElement('div');
-                            feesContainer.className = 'fees-breakdown';
-                            buyButton.parentElement.insertBefore(feesContainer, buyButton);
+                    // Find the total/order summary area - try multiple approaches
+                    const totalSelectors = [
+                        '.pretix-widget-total',
+                        '.pretix-widget-summary',
+                        '[class*="total"]',
+                        '[class*="summary"]',
+                        '.pretix-widget-pricebox',
+                        '.pretix-widget-checkout',
+                        '[class*="checkout"]',
+                        '[class*="order"]'
+                    ];
+                    
+                    let totalElement = null;
+                    for (let selector of totalSelectors) {
+                        const elements = document.querySelectorAll(selector);
+                        console.log(`Selector "${selector}" found ${elements.length} elements`);
+                        if (elements.length > 0) {
+                            totalElement = elements[elements.length - 1]; // Use the last one
+                            console.log(`Found total element with selector: ${selector}`);
+                            break;
                         }
                     }
                     
-                    if (feesContainer) {
-                        // Asegurarnos que el contenedor esté visible
-                        feesContainer.style.display = 'flex';
+                    // If no total element found, try to find the Buy button and insert before it
+                    if (!totalElement) {
+                        const buyButton = document.querySelector('button[class*="buy"], button[class*="checkout"], .pretix-widget-checkout button');
+                        if (buyButton) {
+                            console.log('Found buy button, will insert fees before it');
+                            totalElement = buyButton.parentElement;
+                        }
+                    }
+                    
+                    // If still no element, try to find any container with the widget
+                    if (!totalElement) {
+                        const widgetContainer = document.getElementById('tsw');
+                        if (widgetContainer) {
+                            console.log('Using widget container as fallback');
+                            totalElement = widgetContainer;
+                        }
+                    }
+                    
+                    if (totalElement) {
+                        // Remove any existing fees breakdown
+                        const existingFees = totalElement.querySelectorAll('.fees-breakdown');
+                        existingFees.forEach(fee => fee.remove());
                         
-                        feesContainer.innerHTML = 
-                            '<div style="font-size: 1.1em; font-weight: 600; color: #333; margin-bottom: 4px;">' +
-                            'Total with fees: $' + fees.totalPrice.toFixed(2) +
-                            '</div>' +
-                            '<div style="white-space: nowrap;">' +
-                            'Conference Connect hosting and processing fee: $' + fees.conferenceConnectFee.toFixed(2) +
-                            '</div>' +
-                            '<div style="white-space: nowrap;">' +
-                            'Credit Card processing fee: $' + fees.processingFee.toFixed(2) +
-                            '</div>';
+                        const feesHtml = `
+                            <div class="fees-breakdown" style="
+                                font-size: 0.9em;
+                                color: #666;
+                                margin: 24px 0 8px;
+                                width: 100%;
+                                text-align: right;
+                                display: flex;
+                                flex-direction: column;
+                                gap: 4px;
+                                padding-right: 0;
+                                max-width: 300px;
+                                margin-left: auto;
+                                margin-right: 48px;
+                            ">
+                                <div style="
+                                    font-size: 1.1em;
+                                    font-weight: 600;
+                                    color: #333;
+                                    margin-bottom: 4px;
+                                    display: flex;
+                                    justify-content: flex-end;
+                                    align-items: center;
+                                ">
+                                    <span>Total with fees:</span>
+                                    <span style="margin-left: 8px;">$${fees.totalPrice.toFixed(2)}</span>
+                                </div>
+                                <div style="
+                                    display: flex;
+                                    justify-content: flex-end;
+                                    align-items: center;
+                                    white-space: nowrap;
+                                    font-size: 0.9em;
+                                ">
+                                    <span>Conference Connect hosting and processing fee:</span>
+                                    <span style="margin-left: 8px;">$${fees.conferenceConnectFee.toFixed(2)}</span>
+                                </div>
+                                <div style="
+                                    display: flex;
+                                    justify-content: flex-end;
+                                    align-items: center;
+                                    white-space: nowrap;
+                                    font-size: 0.9em;
+                                ">
+                                    <span>Credit Card processing fee:</span>
+                                    <span style="margin-left: 8px;">$${fees.processingFee.toFixed(2)}</span>
+                                </div>
+                            </div>
+                        `;
+                        totalElement.insertAdjacentHTML('beforeend', feesHtml);
+                        console.log('Added fees breakdown to element');
+                    } else {
+                        console.log('No suitable element found to display fees');
                     }
                 } else {
-                    if (feesContainer) {
-                        feesContainer.style.display = 'none';
-                    }
+                    // Remove any existing fees if total is 0
+                    const existingFees = document.querySelectorAll('.fees-breakdown');
+                    existingFees.forEach(fee => fee.remove());
+                    console.log('Removed existing fees (total is 0)');
                 }
             }
 
-            // Set up event listeners
-            function setupFeeCalculation() {
-                console.log('Setting up listeners');
+            // Set up event listeners for quantity and donation changes
+            function setupQuantityListeners() {
+                console.log('setupQuantityListeners called');
                 
-                // Define handleChange function first
-                const handleChange = () => {
-                    if (window.feeUpdateTimeout) {
-                        clearTimeout(window.feeUpdateTimeout);
-                    }
-                    window.feeUpdateTimeout = setTimeout(async () => {
-                        try {
-                            await updateOrderTotal();
-                        } catch (error) {
-                            console.error('Error updating order total:', error);
-                        }
-                    }, 100);
-                };
-
-                // Remove existing listeners if any
-                const removeExistingListeners = () => {
-                    const inputs = document.querySelectorAll('.pretix-widget-item-count-multiple, .pretix-widget-pricebox-price-input');
-                    inputs.forEach(input => {
-                        input.removeEventListener('change', handleChange);
-                        input.removeEventListener('input', handleChange);
-                    });
-                };
-
-                // Remove any existing listeners first
-                removeExistingListeners();
-
-                // Add new listeners
+                // Find all quantity inputs and donation price inputs
                 const quantityInputs = document.querySelectorAll('.pretix-widget-item-count-multiple');
                 const donationInputs = document.querySelectorAll('.pretix-widget-pricebox-price-input');
                 
-                quantityInputs.forEach(input => {
-                    input.addEventListener('change', handleChange);
-                    input.addEventListener('input', handleChange);
+                console.log('Found quantity inputs for listeners:', quantityInputs.length);
+                console.log('Found donation inputs for listeners:', donationInputs.length);
+                
+                // Setup quantity input listeners
+                quantityInputs.forEach((input, index) => {
+                    console.log(`Setting up listeners for quantity input ${index}:`, input);
+                    
+                    // Remove existing listeners to avoid duplicates
+                    input.removeEventListener('change', handleQuantityChange);
+                    input.removeEventListener('input', handleQuantityChange);
+                    
+                    // Add new listeners
+                    input.addEventListener('change', handleQuantityChange);
+                    input.addEventListener('input', handleQuantityChange);
+                });
+
+                // Setup donation input listeners
+                donationInputs.forEach((input, index) => {
+                    console.log(`Setting up listeners for donation input ${index}:`, input);
+                    
+                    // Remove existing listeners to avoid duplicates
+                    input.removeEventListener('change', handleQuantityChange);
+                    input.removeEventListener('input', handleQuantityChange);
+                    
+                    // Add new listeners
+                    input.addEventListener('change', handleQuantityChange);
+                    input.addEventListener('input', handleQuantityChange);
                 });
                 
-                donationInputs.forEach(input => {
-                    input.addEventListener('change', handleChange);
-                    input.addEventListener('input', handleChange);
+                // Find all quantity buttons (+ and -) using pretix-widget classes
+                const quantityButtons = document.querySelectorAll('.pretix-widget-item-count-plus, .pretix-widget-item-count-minus, button[class*="plus"], button[class*="minus"]');
+                console.log('Found quantity buttons for listeners:', quantityButtons.length);
+                
+                quantityButtons.forEach((button, index) => {
+                    console.log(`Setting up listeners for button ${index}:`, button);
+                    
+                    // Remove existing listeners to avoid duplicates
+                    button.removeEventListener('click', handleQuantityChange);
+                    
+                    // Add new listeners
+                    button.addEventListener('click', handleQuantityChange);
                 });
+            }
+            
+            // Handler function
+            function handleQuantityChange(event) {
+                console.log('Quantity change detected:', event.type, event.target);
+                setTimeout(() => {
+                    console.log('Calling updateOrderTotal from quantity change');
+                    updateOrderTotal();
+                }, 100);
+            }
 
-                // Initial calculation
-                handleChange();
-
-                // Setup MutationObserver to watch for widget updates
+            // Wait for the widget to be fully loaded and built
+            window.PretixWidget.addLoadListener(function () {
+                console.log('PretixWidget.addLoadListener called - widget is fully loaded');
+                
+                const $tsw = document.getElementById('tsw'); // Ticket Shop Widget
+                if($tsw) {
+                    const $isSoldOutNode = document.querySelector('.pretix-widget-availability-box .pretix-widget-availability-gone');
+                    if(!!$isSoldOutNode) { $tsw.classList.add('sold-out'); }
+                }
+                
+                // Wait a bit more for all elements to be rendered
+                setTimeout(() => { 
+                    console.log('Widget should be fully rendered now');
+                    document.body.classList.add('tsw-widget-loaded'); 
+                    updatePriceDisplay();
+                }, 2000);
+                
+                // Set up observer to watch for dynamic content changes
+                const observer = new MutationObserver(function(mutations) {
+                    mutations.forEach(function(mutation) {
+                        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+                            console.log('DOM mutation detected, updating fees');
+                            setTimeout(updatePriceDisplay, 100);
+                        }
+                    });
+                });
+                
+                // Start observing the widget container
                 const widgetContainer = document.getElementById('tsw');
                 if (widgetContainer) {
-                    const observer = new MutationObserver((mutations) => {
-                        for (const mutation of mutations) {
-                            if (mutation.type === 'childList' || mutation.type === 'subtree') {
-                                handleChange();
-                            }
-                        }
-                    });
-
-                    observer.observe(widgetContainer, {
-                        childList: true,
-                        subtree: true
-                    });
-                }
-            }
-
-            // Function to wait for widget to be fully loaded
-            function waitForPretixWidget(maxAttempts = 10) {
-                let attempts = 0;
-                
-                function checkWidget() {
-                    console.log('Checking widget, attempt:', attempts + 1);
-                    const $tsw = document.getElementById('tsw');
-                    const $items = document.querySelectorAll('.pretix-widget-item');
-                    
-                    if ($items.length > 0) {
-                        console.log('Widget items found:', $items.length);
-                        if($tsw) {
-                            const $isSoldOutNode = document.querySelector('.pretix-widget-availability-box .pretix-widget-availability-gone');
-                            if(!!$isSoldOutNode) { $tsw.classList.add('sold-out'); }
-                        }
-                        document.body.classList.add('tsw-widget-loaded');
-                        setupFeeCalculation();
-                        return;
-                    }
-                    
-                    attempts++;
-                    if (attempts < maxAttempts) {
-                        console.log('Widget not ready, trying again in 1s...');
-                        setTimeout(checkWidget, 1000);
-                    } else {
-                        console.error('Widget failed to load after', maxAttempts, 'attempts');
-                    }
+                    observer.observe(widgetContainer, { childList: true, subtree: true });
+                    console.log('Started observing widget container for changes');
                 }
                 
-                checkWidget();
-            }
-
-            // Initialize when widget is ready
-            window.PretixWidget.addLoadListener(function () {
-                console.log('Widget loaded');
-                waitForPretixWidget();
-
-                const eventUrl = document.location.href;
-                const onNavigate = (event) => {
-                    let cleanedUrl = new URL(event.destination.url);
-                    cleanedUrl = cleanedUrl.href.replace(cleanedUrl.hash, '');
-                    if(eventUrl !== cleanedUrl) {
-                        document.body.classList.remove('tsw-widget-loaded');
-                        navigation.removeEventListener("navigate", onNavigate);
-                        console.log('Removed class and listener for pretix:', event);
+                // Setup listeners after initial load
+                setTimeout(setupQuantityListeners, 2500);
+                
+                // Also setup listeners periodically to catch dynamically added elements
+                setInterval(() => {
+                    setupQuantityListeners();
+                }, 3000);
+                
+                // Polling to check for value changes as a fallback
+                let lastValues = [0, 0, 0];
+                setInterval(() => {
+                    const quantityInputs = document.querySelectorAll('.pretix-widget-item-count-multiple, input[type="number"]');
+                    let hasChanged = false;
+                    
+                    quantityInputs.forEach((input, index) => {
+                        const currentValue = parseInt(input.value) || 0;
+                        if (currentValue !== lastValues[index]) {
+                            console.log(`Value changed for input ${index}: ${lastValues[index]} -> ${currentValue}`);
+                            lastValues[index] = currentValue;
+                            hasChanged = true;
+                        }
+                    });
+                    
+                    if (hasChanged) {
+                        console.log('Calling updateOrderTotal from polling');
+                        updateOrderTotal();
                     }
-                }
-                if ('navigation' in window) { navigation.addEventListener("navigate", onNavigate); }
+                }, 500);
             });
         }
     </script>
