@@ -86,23 +86,6 @@
             };
         }
 
-        // Get ticket prices from API
-        async function getTicketPrices() {
-            try {
-                // Usar el nuevo endpoint público
-                const response = await fetch(`${API_BASE_URL}/api/public/events/${EVENT_ID}/ticket-prices`);
-                if (!response.ok) throw new Error('API request failed');
-                
-                const data = await response.json();
-                console.log('API response:', data);
-                return data;
-            } catch (error) {
-                console.error('Error fetching ticket prices:', error);
-                // Si falla la API, intentamos obtener los precios del DOM
-                return null;
-            }
-        }
-
         // Parse price from DOM
         function parsePriceFromElement(priceEl) {
             if (!priceEl) return 0;
@@ -112,6 +95,32 @@
             const price = match ? parseFloat(match[1] || match[2]) : 0;
             console.log('Parsed price:', price);
             return price;
+        }
+
+        // Get ticket prices from API
+        async function getTicketPrices() {
+            try {
+                // Usar el nuevo endpoint público
+                const response = await fetch(`${API_BASE_URL}/api/public/events/${EVENT_ID}/ticket-prices`, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    console.error('API request failed:', response.status, response.statusText);
+                    return null;
+                }
+                
+                const data = await response.json();
+                console.log('API response:', data);
+                return data;
+            } catch (error) {
+                console.error('Error fetching ticket prices:', error);
+                return null;
+            }
         }
 
         // Update fees display
@@ -134,7 +143,7 @@
                     price = parseFloat(donationEl.value || "0");
                     console.log('Donation price:', price);
                 } else if (ticketPrices) {
-                    // Intentar obtener el precio de la API primero
+                    // Try to match the ticket name with the API data
                     const ticketName = container.querySelector('.pretix-widget-item-title')?.textContent.trim();
                     const ticketData = ticketPrices.find(t => t.name === ticketName);
                     if (ticketData) {
@@ -143,7 +152,7 @@
                     } else {
                         // Fallback: obtener el precio del DOM
                         price = parsePriceFromElement(priceEl);
-                        console.log('Using DOM price for', ticketName, ':', price);
+                        console.log('Using DOM price (API failed):', price);
                     }
                 } else {
                     // API falló, usar precios del DOM
