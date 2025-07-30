@@ -62,9 +62,13 @@
     </div>
 
     <script>
+        // Configuration - This will be replaced with actual values when generating the code
+        const EVENT_ID = 'restoring-pretix-test-2';
+        const API_BASE_URL = 'https://tickets-staging.conferenceconnect.com';
+
         // Load Pretix Widget script
         const script = document.createElement("script");
-        script.src = "https://tickets-staging.conferenceconnect.com/widget/v1.en.js";
+        script.src = `${API_BASE_URL}/widget/v1.en.js`;
         script.async = true;
         script.crossOrigin = "anonymous";
         document.head.appendChild(script);
@@ -82,29 +86,10 @@
             };
         }
 
-        // Get event ID from widget URL
-        function getEventId() {
-            const widget = document.querySelector('pretix-widget');
-            if (!widget) return null;
-            
-            const eventUrl = widget.getAttribute('event');
-            if (!eventUrl) return null;
-            
-            // Extract event ID from URL
-            const matches = eventUrl.match(/\/([^\/]+)\/$/);
-            return matches ? matches[1] : null;
-        }
-
         // Get ticket prices from API
         async function getTicketPrices() {
-            const eventId = getEventId();
-            if (!eventId) {
-                console.error('Could not determine event ID');
-                return null;
-            }
-
             try {
-                const response = await fetch(`https://tickets-staging.conferenceconnect.com/api/events/${eventId}/tickets`);
+                const response = await fetch(`${API_BASE_URL}/api/events/${EVENT_ID}/tickets`);
                 if (!response.ok) throw new Error('API request failed');
                 
                 const data = await response.json();
